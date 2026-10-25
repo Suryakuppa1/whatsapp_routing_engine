@@ -12,6 +12,7 @@ from service_assistant.orchestration.engine import Orchestrator
 from service_assistant.orchestration.policies import policy_reply
 from service_assistant.repositories.models import Conversation, IdempotencyRecord, Message
 from service_assistant.repositories.postgres import ChatRepository
+from service_assistant.services.handoffs import handoff_decision
 
 logger = logging.getLogger("service_assistant.orchestration")
 
@@ -61,6 +62,10 @@ class ChatService:
         state = ConversationState.model_validate(conversation.state)
         reply = policy_reply(request.message)
         blocked = reply is not None
+        withhold_handoff_text = (
+            state.pending_handoff_service_id is not None
+            and handoff_decision(request.message) == "unknown"
+        )
         if reply is None:
             started = time.monotonic()
             state, reply = self.engine.reply(request.message, state, request.locale)
@@ -86,7 +91,13 @@ class ChatService:
                 Message(
                     conversation_id=conversation.id,
                     role="user",
-                    text="[sensitive or action request withheld]" if blocked else request.message,
+                    text=(
+                        "[sensitive or action request withheld]"
+                        if blocked
+                        else "[unexpected handoff response withheld]"
+                        if withhold_handoff_text
+                        else request.message
+                    ),
                 ),
                 Message(conversation_id=conversation.id, role="assistant", text=reply.message),
                 IdempotencyRecord(

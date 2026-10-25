@@ -1,0 +1,26 @@
+{
+  "version": "apcpdcl-reviewed-2026-10-25-v1",
+  "sources": [{
+    "id": "apcpdcl-billdesk",
+    "provider": "APCPDCL",
+    "provider_aliases": ["Andhra Pradesh Central Power Distribution Corporation Limited"],
+    "hostname": "payments.billdesk.com",
+    "allowed_paths": ["/MercOnline/CPDCLAPPGController"],
+    "provenance": "Official homepage https://apcpdcl.in/ links Bill Desk Payment to https://payments.billdesk.com/MercOnline/CPDCLAPPGController; page requests service number and CAPTCHA.",
+    "reviewed_by": "Codex public-page inspection on 2026-10-25; no customer data entered",
+    "reviewed_at": "2026-10-25T00:00:00Z",
+    "review_expires_at": "2026-11-24T00:00:00Z",
+    "enabled": true
+  }],
+  "services": [{
+    "id": "apcpdcl-electricity-bill",
+    "source_id": "apcpdcl-billdesk",
+    "intent": "electricity",
+    "label": "APCPDCL official BillDesk payment page",
+    "jurisdiction_aliases": ["Andhra Pradesh", "AP", "Andhra Pradesh, India", "India, Andhra Pradesh"],
+    "detail_aliases": ["bill", "bill payment", "electricity bill", "electricity bill payment", "pay bill", "pay electricity bill"],
+    "official_url": "https://payments.billdesk.com/MercOnline/CPDCLAPPGController",
+    "handoff_adapter": "apcpdcl_billdesk",
+    "enabled": true
+  }]
+}

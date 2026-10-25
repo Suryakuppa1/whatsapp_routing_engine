@@ -9,6 +9,7 @@ from service_assistant.domain.contracts import (
     ConversationState,
     VerifiedLink,
 )
+from service_assistant.services.handoffs import HandoffAdapter, default_handoff_adapters
 from service_assistant.services.registry import (
     ServiceEntry,
     ServiceRegistry,
@@ -27,11 +28,19 @@ class ServiceDiscovery:
         registry: ServiceRegistry,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         search: SearchProvider | None = None,
+        handoffs: dict[str, HandoffAdapter] | None = None,
     ):
         self.registry, self.clock, self.search = registry, clock, search
         self.sources = {source.id: source for source in registry.sources}
+        self.handoffs = default_handoff_adapters() if handoffs is None else handoffs
+        if any(
+            s.handoff_adapter not in self.handoffs for s in registry.services if s.handoff_adapter
+        ):
+            raise ValueError("Registry references an unknown handoff adapter")
 
-    def discover(self, state: ConversationState) -> AssistantReply:
+    def discover(
+        self, state: ConversationState, confirmed_service_id: str | None = None
+    ) -> AssistantReply:
         candidates = []
         now = self.clock()
         for service in self.registry.services:
@@ -79,6 +88,8 @@ class ServiceDiscovery:
         if len(candidates) != 1:
             return self._no_match()
         service, source = candidates[0]
+        if confirmed_service_id is not None and service.id != confirmed_service_id:
+            return self._no_match()
         url = service.official_url
         method = "registry"
         if url is None:
@@ -108,24 +119,51 @@ class ServiceDiscovery:
         if not source.active(now):
             return self._no_match()
         self._log("registry_match_verified", service, source)
+        link = VerifiedLink(
+            label=service.label,
+            url=url,
+            provider=source.provider,
+            service_id=service.id,
+            source_id=source.id,
+            verified_at=now,
+            source_reviewed_at=source.reviewed_at,
+            registry_version=self.registry.version,
+            discovery_method=method,
+        )
+        if service.handoff_adapter:
+            adapter = self.handoffs[service.handoff_adapter]
+            if not adapter.supports(link):
+                return self._no_match()
+            handoff = adapter.instructions(link, confirmed_service_id == service.id)
+            if handoff.status == "awaiting_confirmation":
+                question = (
+                    "Would you like the official payment link? Reply yes or no. "
+                    "You’ll enter your service number, complete the CAPTCHA, and pay on the "
+                    "official site yourself. Automatic prefilling is unavailable."
+                )
+                return AssistantReply(
+                    status="needs_clarification",
+                    message=question,
+                    handoff=handoff,
+                    clarification=Clarification(field="handoff_confirmation", question=question),
+                )
+            return AssistantReply(
+                status="answered",
+                links=[link],
+                handoff=handoff,
+                message=(
+                    "Open the official payment page and enter your service number and CAPTCHA. "
+                    "Review the bill and pay there only if you choose. "
+                    "Nothing has been prefilled, submitted, or paid by the assistant. "
+                    "Live availability was not checked."
+                ),
+            )
         return AssistantReply(
             status="answered",
             message=(
                 "Here is the registered official service page. Live availability was not checked."
             ),
-            links=[
-                VerifiedLink(
-                    label=service.label,
-                    url=url,
-                    provider=source.provider,
-                    service_id=service.id,
-                    source_id=source.id,
-                    verified_at=now,
-                    source_reviewed_at=source.reviewed_at,
-                    registry_version=self.registry.version,
-                    discovery_method=method,
-                )
-            ],
+            links=[link],
         )
 
     def links_current(self, links: list[VerifiedLink]) -> bool:

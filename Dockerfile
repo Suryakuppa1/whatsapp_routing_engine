@@ -10,7 +10,8 @@ RUN --mount=type=secret,id=proxy_ca \
     pip install --no-cache-dir -r requirements.lock && pip install --no-cache-dir --no-deps .
 COPY alembic.ini ./
 COPY migrations ./migrations
-RUN useradd --create-home --uid 10001 assistant
+COPY registry ./registry
+RUN chmod -R a+rX /app && useradd --create-home --uid 10001 assistant
 USER assistant
 EXPOSE 8000
 CMD ["uvicorn", "service_assistant.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

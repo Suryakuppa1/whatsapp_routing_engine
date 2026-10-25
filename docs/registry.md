@@ -1,8 +1,9 @@
 # Reviewed service registry
 
 Increment 3 adds local registry discovery and offline URL verification. No source
-is trusted by default. There are no seeded real-world providers: choosing the
-initial jurisdiction and reviewing official sources remain deployment tasks.
+is trusted by default. The default is empty; an opt-in real APCPDCL preset is available in
+`registry/apcpdcl.json`. See [APCPDCL](apcpdcl.md) for evidence, review expiry, and setup.
+Other providers still require official-source review.
 Synthetic records exist only in tests and a disabled authoring example.
 
 ## Authoring and deployment
