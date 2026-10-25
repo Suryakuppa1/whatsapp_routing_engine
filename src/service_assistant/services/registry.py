@@ -54,6 +54,7 @@ class ServiceEntry(RegistryModel):
     detail_aliases: tuple[Name, ...] = ()
     official_url: str | None = Field(default=None, min_length=1, max_length=2048)
     search_paths: tuple[Name, ...] = ()
+    handoff_adapter: Name | None = None
     enabled: bool = True
 
     @model_validator(mode="after")

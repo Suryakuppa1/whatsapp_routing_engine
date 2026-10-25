@@ -76,3 +76,13 @@ URL can use explicit service-specific search paths that are also source-approved
 One bounded Brave request yields at most five URL-only candidates. Titles and
 snippets never reach the LLM. Unregistered and ambiguous results return no links;
 cached evidence is revalidated without another search. See [search](search.md).
+
+## Assisted handoffs
+
+Provider-specific `HandoffAdapter` implementations live outside orchestration and
+channels. The APCPDCL adapter provides manual official-site instructions, never
+form execution. The core persists a pending service ID/registry version and handles
+explicit yes/no without a model call. Decline clears the pending flow; acceptance
+revalidates discovery before returning a verified link and steps. Review expiry,
+registry revision, and destination mismatch prevent stale handoffs. See
+[APCPDCL](apcpdcl.md).

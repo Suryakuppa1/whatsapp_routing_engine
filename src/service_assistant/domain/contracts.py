@@ -22,10 +22,12 @@ class ConversationState(BaseModel):
     jurisdiction: str | None = Field(default=None, max_length=200)
     service_detail: str | None = Field(default=None, max_length=200)
     pending_field: SlotName | None = None
+    pending_handoff_service_id: str | None = None
+    pending_handoff_registry_version: str | None = None
 
 
 class Clarification(BaseModel):
-    field: Literal["provider", "jurisdiction", "service_detail", "service"]
+    field: Literal["provider", "jurisdiction", "service_detail", "service", "handoff_confirmation"]
     question: str
 
 
@@ -44,11 +46,24 @@ class VerifiedLink(BaseModel):
     discovery_method: Literal["registry", "approved_search"] = "registry"
 
 
+class AssistedHandoff(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    service_id: str
+    mode: Literal["manual_official_site"] = "manual_official_site"
+    status: Literal["awaiting_confirmation", "ready_for_user", "declined"]
+    automatic_prefill: Literal[False] = False
+    payment_by: Literal["user_on_official_site"] = "user_on_official_site"
+    user_steps: tuple[str, ...] = ()
+
+
 class AssistantReply(BaseModel):
-    status: Literal["answered", "needs_clarification", "no_verified_match", "unsupported"]
+    status: Literal[
+        "answered", "needs_clarification", "no_verified_match", "unsupported", "cancelled"
+    ]
     message: str
     clarification: Clarification | None = None
     links: list[VerifiedLink] = Field(default_factory=list, max_length=3)
+    handoff: AssistedHandoff | None = None
 
     @model_validator(mode="after")
     def enforce_evidence(self):
@@ -56,6 +71,18 @@ class AssistantReply(BaseModel):
             raise ValueError("Only answered replies can contain verified evidence")
         if (self.status == "needs_clarification") != bool(self.clarification):
             raise ValueError("Only clarification replies can contain a question")
+        if self.handoff:
+            expected = {
+                "awaiting_confirmation": "needs_clarification",
+                "ready_for_user": "answered",
+                "declined": "cancelled",
+            }[self.handoff.status]
+            if self.status != expected:
+                raise ValueError("Handoff status must match the response outcome")
+            if self.handoff.status == "ready_for_user" and not any(
+                link.service_id == self.handoff.service_id for link in self.links
+            ):
+                raise ValueError("Ready handoffs require matching service evidence")
         return self
 
 
