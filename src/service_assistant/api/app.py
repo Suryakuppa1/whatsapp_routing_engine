@@ -19,11 +19,13 @@ from service_assistant.domain.contracts import ChatRequest, ChatResponse
 from service_assistant.infrastructure.config import Settings
 from service_assistant.infrastructure.database import build_database
 from service_assistant.infrastructure.llm.factory import build_intent_provider
+from service_assistant.infrastructure.search.factory import build_search_provider
 from service_assistant.orchestration.contracts import ProviderError
 from service_assistant.orchestration.engine import Orchestrator
 from service_assistant.services.chat import ApplicationError, ChatService
 from service_assistant.services.discovery import ServiceDiscovery
 from service_assistant.services.registry import load_registry
+from service_assistant.tools.search import SearchError
 
 logger = logging.getLogger("service_assistant.requests")
 bearer = HTTPBearer(auto_error=False)
@@ -33,11 +35,9 @@ def create_app(
     settings: Settings | None = None, orchestrator: Orchestrator | None = None
 ) -> FastAPI:
     settings = settings or Settings()
-    discovery = (
-        ServiceDiscovery(load_registry(settings.service_registry_path))
-        if orchestrator is None
-        else None
-    )
+    registry = load_registry(settings.service_registry_path) if orchestrator is None else None
+    owned_search = build_search_provider(settings) if orchestrator is None else None
+    discovery = ServiceDiscovery(registry, search=owned_search) if registry is not None else None
     db, sessions = build_database(settings.database_url.get_secret_value())
     owned_provider = build_intent_provider(settings) if orchestrator is None else None
     orchestrator = orchestrator or Orchestrator(owned_provider, discovery)
@@ -50,9 +50,12 @@ def create_app(
             close = getattr(owned_provider, "close", None)
             if close:
                 close()
+            close_search = getattr(owned_search, "close", None)
+            if close_search:
+                close_search()
             db.dispose()
 
-    app = FastAPI(title="Service Assistant", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="Service Assistant", version="0.4.0", lifespan=lifespan)
     app.state.sessions = sessions
 
     def error(request: Request, status: int, code: str, message: str, retryable: bool = False):
@@ -111,6 +114,16 @@ def create_app(
             503 if exc.retryable else 502,
             exc.code,
             "I couldn’t safely interpret that request. Please try again shortly.",
+            exc.retryable,
+        )
+
+    @app.exception_handler(SearchError)
+    async def search_error(request: Request, exc: SearchError):
+        return error(
+            request,
+            503 if exc.retryable else 502,
+            exc.code,
+            "Service search is temporarily unavailable. Please try again shortly.",
             exc.retryable,
         )
 
