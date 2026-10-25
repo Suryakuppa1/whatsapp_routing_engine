@@ -41,6 +41,7 @@ class VerifiedLink(BaseModel):
     source_reviewed_at: AwareDatetime
     registry_version: str
     reachability: Literal["not_checked"] = "not_checked"
+    discovery_method: Literal["registry", "approved_search"] = "registry"
 
 
 class AssistantReply(BaseModel):

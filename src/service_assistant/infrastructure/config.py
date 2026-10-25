@@ -19,9 +19,18 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4.1-mini", min_length=1, max_length=100)
     llm_timeout_seconds: float = Field(default=8, ge=1, le=15)
     service_registry_path: Path | None = None
+    search_provider: Literal["disabled", "brave"] = "disabled"
+    brave_search_api_key: SecretStr | None = None
+    search_timeout_seconds: float = Field(default=5, ge=1, le=8)
 
     @model_validator(mode="after")
     def validate_llm(self):
+        if self.search_provider == "brave":
+            if (
+                not self.brave_search_api_key
+                or not self.brave_search_api_key.get_secret_value().strip()
+            ):
+                raise ValueError("BRAVE_SEARCH_API_KEY is required for brave search")
         if self.llm_provider == "openai":
             if not self.openai_api_key or not self.openai_api_key.get_secret_value().strip():
                 raise ValueError("OPENAI_API_KEY is required for the openai provider")

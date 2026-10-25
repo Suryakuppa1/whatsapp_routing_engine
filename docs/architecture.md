@@ -32,8 +32,8 @@ deployment. HTTP phase timeouts are not a strict end-to-end wall-clock deadline.
    secure credentials, live smoke test, and real model behavior evaluation pending.
 3. Reviewed local provider/source registry and explicit service plugins — implemented;
    production source review and population remain deployment work.
-4. Offline official URL verification — implemented. Approved search fallback and
-   network verification are pending.
+4. Offline official URL verification and constrained Brave Search fallback — implemented
+   with mocked provider contracts. Live search smoke tests and network verification remain pending.
 5. Telegram webhook, authenticated normalization, inbox deduplication and delivery outbox.
 6. WhatsApp adapter contract tests, production hardening and operational documentation.
 
@@ -68,3 +68,11 @@ foundation uses sync SQLAlchemy in FastAPI's worker threads with bounded connect
 pools. Later asynchronous inbox workers handle channel events and outbox delivery;
 approved search/LLM clients need timeouts, backoff, budgets, and schema validation.
 Implement a distributed admission/rate-limit mechanism before public exposure.
+
+## Approved search boundary
+
+A pinned registry URL bypasses search. A unique reviewed service without a pinned
+URL can use explicit service-specific search paths that are also source-approved.
+One bounded Brave request yields at most five URL-only candidates. Titles and
+snippets never reach the LLM. Unregistered and ambiguous results return no links;
+cached evidence is revalidated without another search. See [search](search.md).

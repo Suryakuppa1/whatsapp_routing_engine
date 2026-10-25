@@ -52,11 +52,16 @@ class ServiceEntry(RegistryModel):
     label: Name
     jurisdiction_aliases: tuple[Name, ...] = Field(min_length=1)
     detail_aliases: tuple[Name, ...] = ()
-    official_url: str = Field(min_length=1, max_length=2048)
+    official_url: str | None = Field(default=None, min_length=1, max_length=2048)
+    search_paths: tuple[Name, ...] = ()
     enabled: bool = True
 
     @model_validator(mode="after")
     def require_details(self):
+        if self.official_url is None and not self.search_paths:
+            raise ValueError("A service needs an official URL or explicit search paths")
+        if not all(safe_path(path) for path in self.search_paths):
+            raise ValueError("Search paths must be exact canonical paths")
         if self.intent == "unknown":
             raise ValueError("Unknown is not a registrable service")
         if self.intent != "electricity" and not self.detail_aliases:
@@ -78,6 +83,12 @@ class ServiceRegistry(RegistryModel):
             raise ValueError("Registry IDs must be unique")
         if any(service.source_id not in ids for service in self.services):
             raise ValueError("Every service must reference an existing trusted source")
+        sources = {source.id: source for source in self.sources}
+        if any(
+            not set(service.search_paths).issubset(sources[service.source_id].allowed_paths)
+            for service in self.services
+        ):
+            raise ValueError("Service search paths must be explicitly allowed by their source")
         return self
 
 

@@ -42,7 +42,8 @@ provider. Forms/appointments require jurisdiction and service details; service
 issues require provider and issue details. Ambiguous matches ask for another
 missing discriminating field or return `no_verified_match`. The first candidate
 is never silently selected. Empty, expired, disabled, conflicting, or unsafe
-candidates yield no links. Web search fallback is not implemented yet.
+candidates yield no links. Search-only service catalogs can omit `official_url`
+and list exact `search_paths` approved by their source. See [search](search.md).
 
 ## URL policy and evidence
 

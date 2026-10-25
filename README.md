@@ -2,10 +2,11 @@
 
 Channel-independent AI Service Assistant backend.
 
-Channel-independent FastAPI backend. **Increment 3: reviewed registry discovery.**
+Channel-independent FastAPI backend. **Increment 4: approved search discovery.**
 Includes a deterministic fake and an OpenAI Responses API adapter. Live-provider
 verification is pending secure credential setup. Official links can be returned
-from a deployment-controlled reviewed registry; web search is not available yet.
+from a deployment-controlled reviewed registry, optionally using constrained Brave Search.
+Search is disabled by default; live Brave validation requires credentials and network access.
 
 ## Implemented
 
@@ -22,12 +23,14 @@ from a deployment-controlled reviewed registry; web search is not available yet.
 - Application-controlled clarification, slot provenance checks, and safe upstream errors.
 - OpenAI adapter with request timeouts, response-size limits, no automatic retries,
   no redirects, and provider-side response storage disabled (`store=false`).
+- Replaceable Brave Search adapter with bounded requests and safe unverified-result handling.
 - Explicit service plugins, reviewed registry loading, exact service matching,
   offline URL verification, source expiry/revocation checks, and structured evidence.
 
 The default registry is empty. To enable real services, follow the
 [registry authoring and verification guide](docs/registry.md). No synthetic test
-record is enabled in the application.
+record is enabled in the application. See the [search integration guide](docs/search.md)
+for search-only catalogs, configuration, and trust boundaries.
 
 ## Local setup
 
@@ -161,7 +164,7 @@ intent accuracy; behavioral evaluation with a live model is still pending.
 ## Limits and next increment
 
 This is a development increment, not a production deployment. It has no verified
-live LLM connection, network URL fetching, search integration, Telegram bot, delivery worker, or
+live LLM connection, verified live search connection, network URL fetching, Telegram bot, delivery worker, or
 WhatsApp implementation. The channel contract is the future integration boundary.
 
 Normal conversation text is persisted. The conservative secret guard withholds
@@ -171,7 +174,7 @@ expiry does not delete records. Production rollout requires a retention/deletion
 policy, rate limits, request-size limits, deployment TLS, and end-user identity
 mapping. Keep PostgreSQL private; use TLS for remote database connections.
 
-Next: an approved search-provider integration with safe unverified-result handling,
-then Telegram webhook and delivery support.
+Next: Telegram webhook and delivery support. Search and AI provider live smoke tests
+remain pending securely configured credentials; ordinary tests make no paid API calls.
 Secure credential setup and a live structured-output smoke test remain pending.
 See [the architecture and roadmap](docs/architecture.md).

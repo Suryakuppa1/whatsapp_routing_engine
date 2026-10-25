@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "service-assistant"
-version = "0.3.0"
-description = "Channel-independent service assistant with trusted registry discovery"
+version = "0.4.0"
+description = "Channel-independent service assistant with approved search discovery"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1", "uvicorn>=0.34,<1", "sqlalchemy>=2.0,<3",
