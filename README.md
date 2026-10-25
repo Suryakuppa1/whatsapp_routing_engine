@@ -2,7 +2,7 @@
 
 Channel-independent AI Service Assistant backend.
 
-Channel-independent FastAPI backend. **Increment 5: APCPDCL assisted payment handoff.**
+Channel-independent FastAPI backend. **Increment 6: user-sent complaint email drafts.**
 Includes a deterministic fake and an OpenAI Responses API adapter. Live-provider
 verification is pending secure credential setup. Official links can be returned
 from a deployment-controlled reviewed registry, optionally using constrained Brave Search.
@@ -23,6 +23,7 @@ Search is disabled by default; live Brave validation requires credentials and ne
 - Application-controlled clarification, slot provenance checks, and safe upstream errors.
 - OpenAI adapter with request timeouts, response-size limits, no automatic retries,
   no redirects, and provider-side response storage disabled (`store=false`).
+- Formal complaint email drafts with reviewed recipients, explicit sign-off names, and user-send instructions.
 - APCPDCL manual payment handoff with deterministic confirmation/decline and user instructions.
 - Replaceable Brave Search adapter with bounded requests and safe unverified-result handling.
 - Explicit service plugins, reviewed registry loading, exact service matching,
@@ -185,3 +186,9 @@ For APCPDCL, select `registry/apcpdcl.json` through `SERVICE_REGISTRY_PATH`. The
 assistant asks whether the user wants the link, returns instructions on yes, and
 stops on no. Automatic prefilling and assistant-initiated payment are unavailable;
 service numbers, CAPTCHA and payment details are entered only on the official site.
+
+Complaint emails are drafted, never sent. Enable the APCPDCL registry and ask to
+compose a complaint email; the assistant collects missing details and your chosen
+name, then returns To/Subject/Body/Regards and asks you to send from your own account.
+See [complaint draft setup and API contract](docs/complaint-email.md). Live WhatsApp
+and Telegram delivery adapters remain pending; plain-text channel rendering is included.

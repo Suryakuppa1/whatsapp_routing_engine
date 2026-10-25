@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -70,10 +71,27 @@ class ServiceEntry(RegistryModel):
         return self
 
 
+class SupportContact(RegistryModel):
+    id: Name
+    source_id: Name
+    jurisdiction_aliases: tuple[Name, ...] = Field(min_length=1)
+    email: str = Field(min_length=3, max_length=254)
+    evidence_url: str = Field(min_length=1, max_length=2048)
+    purpose: str = Field(default="customer_complaints", pattern="^customer_complaints$")
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def single_recipient(self):
+        if not re.fullmatch(r"[A-Za-z0-9._+-]+@[a-z0-9.-]+\.[a-z]{2,63}", self.email):
+            raise ValueError("Support contact must be a single plain email address")
+        return self
+
+
 class ServiceRegistry(RegistryModel):
     version: Name
     sources: tuple[TrustedSource, ...] = ()
     services: tuple[ServiceEntry, ...] = ()
+    support_contacts: tuple[SupportContact, ...] = ()
 
     @model_validator(mode="after")
     def validate_references(self):
@@ -85,6 +103,14 @@ class ServiceRegistry(RegistryModel):
         if any(service.source_id not in ids for service in self.services):
             raise ValueError("Every service must reference an existing trusted source")
         sources = {source.id: source for source in self.sources}
+        if len({c.id for c in self.support_contacts}) != len(self.support_contacts):
+            raise ValueError("Support contact IDs must be unique")
+        for contact in self.support_contacts:
+            source = sources.get(contact.source_id)
+            if source is None:
+                raise ValueError("Support contact needs an existing source")
+            if contact.email.split("@", 1)[1] != source.hostname:
+                raise ValueError("Contact email must belong to its reviewed source domain")
         if any(
             not set(service.search_paths).issubset(sources[service.source_id].allowed_paths)
             for service in self.services

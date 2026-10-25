@@ -1,3 +1,5 @@
+import re
+
 from pydantic import ValidationError
 
 from service_assistant.domain.contracts import (
@@ -12,6 +14,7 @@ from service_assistant.orchestration.contracts import (
     ProviderError,
 )
 from service_assistant.orchestration.policies import policy_reply
+from service_assistant.services.complaints import ComplaintDraftService
 from service_assistant.services.discovery import ServiceDiscovery
 from service_assistant.services.handoffs import handoff_decision
 from service_assistant.services.plugins import DEFAULT_PLUGINS, ServicePlugin, plugin_map
@@ -33,7 +36,13 @@ class FakeIntentProvider:
     ) -> IntentInterpretation:
         context_fields = {"intent", "provider", "jurisdiction", "service_detail"}
         values = state.model_dump(include=context_fields)
-        if "electricity" in message.casefold():
+        if re.search(r"\b(complaint|grievance)\b", message, re.I) and re.search(
+            r"\b(email|mail|draft|compose)\b", message, re.I
+        ):
+            values = ConversationState(
+                intent="complaint_email", provider=state.provider, jurisdiction=state.jurisdiction
+            ).model_dump(include=context_fields)
+        elif "electricity" in message.casefold():
             if state.intent != "electricity":
                 values = ConversationState(intent="electricity").model_dump(include=context_fields)
         elif state.pending_field:
@@ -57,9 +66,19 @@ class Orchestrator:
     def reply(
         self, message: str, state: ConversationState, locale: str = "en-IN"
     ) -> tuple[ConversationState, AssistantReply]:
+        complaints = ComplaintDraftService(self.discovery.registry, self.discovery.clock)
+        if state.complaint_pending:
+            return complaints.advance(state, message)
         if state.pending_handoff_service_id:
             return self._confirm_handoff(message, state)
-        result = self.provider.interpret(message, state.model_copy(deep=True), locale)
+        extraction_context = ConversationState(
+            intent=state.intent,
+            provider=state.provider,
+            jurisdiction=state.jurisdiction,
+            service_detail=state.service_detail,
+            pending_field=state.pending_field,
+        )
+        result = self.provider.interpret(message, extraction_context, locale)
         if not isinstance(result, IntentInterpretation):
             raise ProviderError("PROVIDER_INVALID_OUTPUT", False)
         try:
@@ -92,6 +111,11 @@ class Orchestrator:
         )
         if state.intent == "unknown":
             return ConversationState(), self._clarify("service")
+        if state.intent == "complaint_email":
+            # The full original report is preserved only when the extractor found issue details.
+            if result.service_detail:
+                state.complaint_description = message
+            return complaints.advance(state)
         plugin = self.plugins.get(state.intent)
         if plugin is None:
             return state, AssistantReply(

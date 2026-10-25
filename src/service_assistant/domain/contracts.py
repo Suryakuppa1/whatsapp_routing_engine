@@ -11,7 +11,9 @@ class ChatRequest(BaseModel):
     locale: Literal["en-IN", "en", "en-US", "en-GB"] = "en-IN"
 
 
-ServiceIntent = Literal["electricity", "government_form", "appointment", "service_issue", "unknown"]
+ServiceIntent = Literal[
+    "electricity", "government_form", "appointment", "service_issue", "complaint_email", "unknown"
+]
 SlotName = Literal["provider", "jurisdiction", "service_detail"]
 
 
@@ -24,10 +26,23 @@ class ConversationState(BaseModel):
     pending_field: SlotName | None = None
     pending_handoff_service_id: str | None = None
     pending_handoff_registry_version: str | None = None
+    complaint_description: str | None = Field(default=None, max_length=4000)
+    complaint_sender_name: str | None = Field(default=None, max_length=100)
+    complaint_pending: Literal["provider", "jurisdiction", "description", "sender_name"] | None = (
+        None
+    )
 
 
 class Clarification(BaseModel):
-    field: Literal["provider", "jurisdiction", "service_detail", "service", "handoff_confirmation"]
+    field: Literal[
+        "provider",
+        "jurisdiction",
+        "service_detail",
+        "service",
+        "handoff_confirmation",
+        "complaint_description",
+        "sender_name",
+    ]
     question: str
 
 
@@ -56,17 +71,44 @@ class AssistedHandoff(BaseModel):
     user_steps: tuple[str, ...] = ()
 
 
+class ComplaintEmailDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    to: str
+    subject: str
+    body: str
+    regards: str
+    sender_name: str
+    provider: str
+    contact_id: str
+    source_id: str
+    evidence_url: str
+    source_reviewed_at: AwareDatetime
+    verified_at: AwareDatetime
+    registry_version: str
+    verification: Literal["registry_verified"] = "registry_verified"
+    delivery_status: Literal["not_sent"] = "not_sent"
+    user_action: Literal["review_and_send_from_your_email"] = "review_and_send_from_your_email"
+
+
 class AssistantReply(BaseModel):
     status: Literal[
-        "answered", "needs_clarification", "no_verified_match", "unsupported", "cancelled"
+        "answered",
+        "needs_clarification",
+        "no_verified_match",
+        "unsupported",
+        "cancelled",
+        "draft_ready",
     ]
     message: str
     clarification: Clarification | None = None
     links: list[VerifiedLink] = Field(default_factory=list, max_length=3)
     handoff: AssistedHandoff | None = None
+    email_draft: ComplaintEmailDraft | None = None
 
     @model_validator(mode="after")
     def enforce_evidence(self):
+        if (self.status == "draft_ready") != bool(self.email_draft):
+            raise ValueError("Draft-ready replies require an unsent email draft")
         if (self.status == "answered") != bool(self.links):
             raise ValueError("Only answered replies can contain verified evidence")
         if (self.status == "needs_clarification") != bool(self.clarification):

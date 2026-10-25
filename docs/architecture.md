@@ -86,3 +86,12 @@ explicit yes/no without a model call. Decline clears the pending flow; acceptanc
 revalidates discovery before returning a verified link and steps. Review expiry,
 registry revision, and destination mismatch prevent stale handoffs. See
 [APCPDCL](apcpdcl.md).
+
+## Complaint email drafting
+
+`ComplaintDraftService` selects one active reviewed support contact for provider
+and jurisdiction, then collects the user's issue and sign-off name. It produces
+a deterministic formal draft and `not_sent` metadata, never an email-send action.
+The core recognizes `complaint_email`; pending collection bypasses the LLM. Support
+contact evidence and cached drafts are checked against current registry policy.
+Channel rendering is separate from composition. See [complaint drafts](complaint-email.md).
