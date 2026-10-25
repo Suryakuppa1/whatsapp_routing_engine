@@ -1,0 +1,25 @@
+{
+  "version": "disabled-authoring-example-v1",
+  "sources": [{
+    "id": "synthetic-provider",
+    "provider": "Synthetic Utility - replace before enabling",
+    "provider_aliases": [],
+    "hostname": "fixture.gov.uk",
+    "allowed_paths": ["/bill"],
+    "provenance": "SYNTHETIC EXAMPLE: replace with evidence of official authority",
+    "reviewed_by": "SYNTHETIC EXAMPLE: replace with reviewer identity",
+    "reviewed_at": "2026-10-25T00:00:00Z",
+    "review_expires_at": "2026-11-24T00:00:00Z",
+    "enabled": false
+  }],
+  "services": [{
+    "id": "synthetic-bill",
+    "source_id": "synthetic-provider",
+    "intent": "electricity",
+    "label": "Synthetic bill information - not a real service",
+    "jurisdiction_aliases": ["Testland"],
+    "detail_aliases": [],
+    "official_url": "https://fixture.gov.uk/bill",
+    "enabled": false
+  }]
+}

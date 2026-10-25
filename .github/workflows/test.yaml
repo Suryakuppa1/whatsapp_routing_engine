@@ -1,0 +1,29 @@
+name: Backend checks
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: assistant
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: assistant_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U assistant -d assistant_test"
+          --health-interval 3s --health-timeout 3s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --extra dev
+      - run: uv run ruff check src tests migrations
+      - run: uv run ruff format --check src tests migrations
+      - run: uv run pytest -q
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://assistant:test-only-password@localhost:5432/assistant_test
