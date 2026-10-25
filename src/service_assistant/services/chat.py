@@ -12,6 +12,8 @@ from service_assistant.orchestration.engine import Orchestrator
 from service_assistant.orchestration.policies import policy_reply
 from service_assistant.repositories.models import Conversation, IdempotencyRecord, Message
 from service_assistant.repositories.postgres import ChatRepository
+from service_assistant.services.complaints import ComplaintDraftService, valid_sender_name
+from service_assistant.services.handoffs import handoff_decision
 
 logger = logging.getLogger("service_assistant.orchestration")
 
@@ -36,7 +38,9 @@ class ChatService:
             if previous.request_hash != fingerprint:
                 raise ApplicationError(409, "IDEMPOTENCY_CONFLICT", "Use a new idempotency key.")
             cached = ChatResponse.model_validate(previous.response)
-            if not self.engine.discovery.links_current(cached.links):
+            if not self.engine.discovery.links_current(cached.links) or not ComplaintDraftService(
+                self.engine.discovery.registry, self.engine.discovery.clock
+            ).draft_current(cached.email_draft):
                 raise ApplicationError(
                     409,
                     "VERIFICATION_EXPIRED",
@@ -61,6 +65,13 @@ class ChatService:
         state = ConversationState.model_validate(conversation.state)
         reply = policy_reply(request.message)
         blocked = reply is not None
+        withhold_handoff_text = (
+            state.pending_handoff_service_id is not None
+            and handoff_decision(request.message) == "unknown"
+        )
+        withhold_invalid_name = state.complaint_pending == "sender_name" and not valid_sender_name(
+            request.message.strip()
+        )
         if reply is None:
             started = time.monotonic()
             state, reply = self.engine.reply(request.message, state, request.locale)
@@ -86,7 +97,15 @@ class ChatService:
                 Message(
                     conversation_id=conversation.id,
                     role="user",
-                    text="[sensitive or action request withheld]" if blocked else request.message,
+                    text=(
+                        "[sensitive or action request withheld]"
+                        if blocked
+                        else "[unexpected handoff response withheld]"
+                        if withhold_handoff_text
+                        else "[invalid sign-off name withheld]"
+                        if withhold_invalid_name
+                        else request.message
+                    ),
                 ),
                 Message(conversation_id=conversation.id, role="assistant", text=reply.message),
                 IdempotencyRecord(

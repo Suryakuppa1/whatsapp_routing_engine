@@ -44,7 +44,15 @@ class OpenAIIntentProvider:
             "input": json.dumps(
                 {
                     "message": message,
-                    "previous_context": state.model_dump(),
+                    "previous_context": state.model_dump(
+                        include={
+                            "intent",
+                            "provider",
+                            "jurisdiction",
+                            "service_detail",
+                            "pending_field",
+                        }
+                    ),
                     "locale": locale,
                 }
             ),

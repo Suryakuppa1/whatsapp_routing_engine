@@ -1,13 +1,22 @@
+import re
+
 from pydantic import ValidationError
 
-from service_assistant.domain.contracts import AssistantReply, Clarification, ConversationState
+from service_assistant.domain.contracts import (
+    AssistantReply,
+    AssistedHandoff,
+    Clarification,
+    ConversationState,
+)
 from service_assistant.orchestration.contracts import (
     IntentInterpretation,
     IntentProvider,
     ProviderError,
 )
 from service_assistant.orchestration.policies import policy_reply
+from service_assistant.services.complaints import ComplaintDraftService
 from service_assistant.services.discovery import ServiceDiscovery
+from service_assistant.services.handoffs import handoff_decision
 from service_assistant.services.plugins import DEFAULT_PLUGINS, ServicePlugin, plugin_map
 from service_assistant.services.registry import ServiceRegistry
 
@@ -25,16 +34,21 @@ class FakeIntentProvider:
     def interpret(
         self, message: str, state: ConversationState, locale: str = "en-IN"
     ) -> IntentInterpretation:
-        values = state.model_dump(exclude={"pending_field"})
-        if "electricity" in message.casefold():
+        context_fields = {"intent", "provider", "jurisdiction", "service_detail"}
+        values = state.model_dump(include=context_fields)
+        if re.search(r"\b(complaint|grievance)\b", message, re.I) and re.search(
+            r"\b(email|mail|draft|compose)\b", message, re.I
+        ):
+            values = ConversationState(
+                intent="complaint_email", provider=state.provider, jurisdiction=state.jurisdiction
+            ).model_dump(include=context_fields)
+        elif "electricity" in message.casefold():
             if state.intent != "electricity":
-                values = ConversationState(intent="electricity").model_dump(
-                    exclude={"pending_field"}
-                )
+                values = ConversationState(intent="electricity").model_dump(include=context_fields)
         elif state.pending_field:
             values[state.pending_field] = message[:200]
         else:
-            values = ConversationState().model_dump(exclude={"pending_field"})
+            values = ConversationState().model_dump(include=context_fields)
         return IntentInterpretation(**values, action="information")
 
 
@@ -52,7 +66,19 @@ class Orchestrator:
     def reply(
         self, message: str, state: ConversationState, locale: str = "en-IN"
     ) -> tuple[ConversationState, AssistantReply]:
-        result = self.provider.interpret(message, state.model_copy(deep=True), locale)
+        complaints = ComplaintDraftService(self.discovery.registry, self.discovery.clock)
+        if state.complaint_pending:
+            return complaints.advance(state, message)
+        if state.pending_handoff_service_id:
+            return self._confirm_handoff(message, state)
+        extraction_context = ConversationState(
+            intent=state.intent,
+            provider=state.provider,
+            jurisdiction=state.jurisdiction,
+            service_detail=state.service_detail,
+            pending_field=state.pending_field,
+        )
+        result = self.provider.interpret(message, extraction_context, locale)
         if not isinstance(result, IntentInterpretation):
             raise ProviderError("PROVIDER_INVALID_OUTPUT", False)
         try:
@@ -85,6 +111,11 @@ class Orchestrator:
         )
         if state.intent == "unknown":
             return ConversationState(), self._clarify("service")
+        if state.intent == "complaint_email":
+            # The full original report is preserved only when the extractor found issue details.
+            if result.service_detail:
+                state.complaint_description = message
+            return complaints.advance(state)
         plugin = self.plugins.get(state.intent)
         if plugin is None:
             return state, AssistantReply(
@@ -95,9 +126,52 @@ class Orchestrator:
                 state.pending_field = field
                 return state, self._clarify(field)
         reply = self.discovery.discover(state)
-        if reply.clarification and reply.clarification.field != "service":
+        if reply.handoff and reply.handoff.status == "awaiting_confirmation":
+            state.pending_handoff_service_id = reply.handoff.service_id
+            state.pending_handoff_registry_version = self.discovery.registry.version
+        elif reply.clarification and reply.clarification.field != "service":
             state.pending_field = reply.clarification.field
         return state, reply
+
+    def _confirm_handoff(
+        self, message: str, state: ConversationState
+    ) -> tuple[ConversationState, AssistantReply]:
+        answer = handoff_decision(message)
+        service_id = state.pending_handoff_service_id
+        if answer == "decline":
+            state = state.model_copy(
+                update={
+                    "pending_handoff_service_id": None,
+                    "pending_handoff_registry_version": None,
+                }
+            )
+            return state, AssistantReply(
+                status="cancelled",
+                message="Stopped. The assistant has not submitted a form or initiated a payment.",
+                handoff=AssistedHandoff(service_id=service_id, status="declined"),
+            )
+        if answer != "accept":
+            return state, AssistantReply(
+                status="needs_clarification",
+                message="Please reply yes for the official link, or no to stop.",
+                clarification=Clarification(
+                    field="handoff_confirmation", question="Would you like the official link?"
+                ),
+                handoff=AssistedHandoff(service_id=service_id, status="awaiting_confirmation"),
+            )
+        version = state.pending_handoff_registry_version
+        state = state.model_copy(
+            update={
+                "pending_handoff_service_id": None,
+                "pending_handoff_registry_version": None,
+            }
+        )
+        if version != self.discovery.registry.version:
+            return state, AssistantReply(
+                status="no_verified_match",
+                message="The service information changed. Please start a new service request.",
+            )
+        return state, self.discovery.discover(state, confirmed_service_id=service_id)
 
     @staticmethod
     def _clarify(field: str) -> AssistantReply:

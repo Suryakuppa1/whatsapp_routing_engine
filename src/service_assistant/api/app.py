@@ -55,7 +55,7 @@ def create_app(
                 close_search()
             db.dispose()
 
-    app = FastAPI(title="Service Assistant", version="0.4.0", lifespan=lifespan)
+    app = FastAPI(title="Service Assistant", version="0.6.0", lifespan=lifespan)
     app.state.sessions = sessions
 
     def error(request: Request, status: int, code: str, message: str, retryable: bool = False):
